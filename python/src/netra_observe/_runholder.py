@@ -5,8 +5,6 @@ from contextvars import ContextVar
 from typing import Any, Optional
 from uuid import UUID
 
-from langchain_core.callbacks import BaseCallbackHandler
-
 logger = logging.getLogger("netra_observe")
 
 # The chat-model/LLM run currently in flight in this execution context.
@@ -21,46 +19,61 @@ _current_llm_run: ContextVar[Optional[UUID]] = ContextVar(
 
 # register_configure_hook injects the handler held by this var into EVERY
 # callback configure() — including bare invokes with no callbacks passed.
-_holder_var: ContextVar[Optional["_RunHolder"]] = ContextVar(
+_holder_var: ContextVar[Optional[Any]] = ContextVar(
     "netra_run_holder", default=None
 )
 _hook_registered = False
-
-
-class _RunHolder(BaseCallbackHandler):
-    """Records the in-flight LLM run id. run_inline keeps async dispatch in
-    the caller's context so the ContextVar write is visible to the HTTP call."""
-
-    run_inline = True
-
-    def on_chat_model_start(self, serialized: Any, messages: Any, *, run_id: UUID, **kw: Any) -> None:
-        _current_llm_run.set(run_id)
-
-    def on_llm_start(self, serialized: Any, prompts: Any, *, run_id: UUID, **kw: Any) -> None:
-        _current_llm_run.set(run_id)
-
-    def on_llm_end(self, response: Any, *, run_id: UUID, **kw: Any) -> None:
-        if _current_llm_run.get() == run_id:
-            _current_llm_run.set(None)
-
-    def on_llm_error(self, error: BaseException, *, run_id: UUID, **kw: Any) -> None:
-        if _current_llm_run.get() == run_id:
-            _current_llm_run.set(None)
+_holder_cls: Optional[type] = None
 
 
 def current_llm_run_id() -> Optional[UUID]:
     return _current_llm_run.get()
 
 
-def activate() -> None:
-    """Register the run-holder into LangChain's global callback configuration."""
-    global _hook_registered
-    if not _hook_registered:
-        from langchain_core.tracers.context import register_configure_hook
+def _build_holder_cls() -> type:
+    """Define the handler lazily: langchain-core is the USER's dependency —
+    importing netra_observe must never require (or crash without) it."""
+    from langchain_core.callbacks import BaseCallbackHandler
 
-        register_configure_hook(_holder_var, inheritable=True)
-        _hook_registered = True
-    _holder_var.set(_RunHolder())
+    class _RunHolder(BaseCallbackHandler):
+        """Records the in-flight LLM run id. run_inline keeps async dispatch
+        in the caller's context so the ContextVar write is visible to the
+        HTTP call."""
+
+        run_inline = True
+
+        def on_chat_model_start(self, serialized: Any, messages: Any, *, run_id: UUID, **kw: Any) -> None:
+            _current_llm_run.set(run_id)
+
+        def on_llm_start(self, serialized: Any, prompts: Any, *, run_id: UUID, **kw: Any) -> None:
+            _current_llm_run.set(run_id)
+
+        def on_llm_end(self, response: Any, *, run_id: UUID, **kw: Any) -> None:
+            if _current_llm_run.get() == run_id:
+                _current_llm_run.set(None)
+
+        def on_llm_error(self, error: BaseException, *, run_id: UUID, **kw: Any) -> None:
+            if _current_llm_run.get() == run_id:
+                _current_llm_run.set(None)
+
+    return _RunHolder
+
+
+def activate() -> None:
+    """Register the run-holder into LangChain's global callback configuration.
+    No-op (with a debug log) when langchain-core is not installed."""
+    global _hook_registered, _holder_cls
+    try:
+        if _holder_cls is None:
+            _holder_cls = _build_holder_cls()
+        if not _hook_registered:
+            from langchain_core.tracers.context import register_configure_hook
+
+            register_configure_hook(_holder_var, inheritable=True)
+            _hook_registered = True
+        _holder_var.set(_holder_cls())
+    except Exception:  # langchain-core absent or API drift — degrade quietly
+        logger.debug("run-holder activation failed", exc_info=True)
 
 
 def deactivate() -> None:
