@@ -19,7 +19,8 @@
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/exporter-trace-otlp-proto": "^0.220.0",
     "@opentelemetry/instrumentation": "^0.220.0",
-    "@opentelemetry/sdk-trace-node": "^2.9.0"
+    "@opentelemetry/sdk-trace-node": "^2.9.0",
+    "import-in-the-middle": "^3.3.1"
   },
   "peerDependencies": {
     "@langchain/core": "^1.0.0"
@@ -31,10 +32,13 @@
   },
   "devDependencies": {
     "@langchain/core": "^1.2.0",
+    "@langchain/openai": "^1.5.3",
     "@opentelemetry/sdk-trace-base": "^2.9.0",
-    "openai": "^5.23.2",
+    "openai": "^6.0.0",
     "tsup": "^8.0.0",
+    "tsx": "^4.23.0",
     "typescript": "^5.5.0",
-    "vitest": "^2.0.0"
+    "vitest": "^2.0.0",
+    "zod": "^4.4.3"
   }
 }
