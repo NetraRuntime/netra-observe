@@ -24,7 +24,11 @@ def build_exporter(cfg: Config) -> OTLPSpanExporter:
     )
 
 
+def build_processor(cfg: Config) -> BatchSpanProcessor:
+    return BatchSpanProcessor(build_exporter(cfg))
+
+
 def build_provider(cfg: Config) -> TracerProvider:
     provider = TracerProvider(resource=build_resource(cfg))
-    provider.add_span_processor(BatchSpanProcessor(build_exporter(cfg)))
+    provider.add_span_processor(build_processor(cfg))
     return provider

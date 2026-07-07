@@ -131,3 +131,20 @@ def test_bare_chat_model_invoke_tags_the_llm_span(capture_server):
     span = llm_spans[0]
     assert format(span.context.trace_id, "032x") in tp
     assert format(span.context.span_id, "016x") in tp
+
+
+def test_normalized_host_match_default_port(capture_server):
+    """Post-review S-I4: an endpoint carrying the scheme's default port or
+    uppercase host must still match httpx's normalized request netloc."""
+    from netra_observe._config import normalize_netloc
+
+    assert normalize_netloc("API.NETRARUNTIME.COM:443", "https") == "api.netraruntime.com"
+    assert normalize_netloc("localhost:80", "http") == "localhost"
+    assert normalize_netloc("localhost:8080", "http") == "localhost:8080"
+
+    host, captured = capture_server  # host is 127.0.0.1:<random>, http
+    install(host.upper())  # case-insensitive match must survive
+    tracer, _ = _tracer()
+    with tracer.start_as_current_span("llm call"):
+        httpx.get(f"http://{host}/v1/chat/completions")
+    assert "traceparent" in captured[0]

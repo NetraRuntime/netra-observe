@@ -69,3 +69,18 @@ netra-observe must never break your app: export failures are logged and
 dropped (spans are batched and sent in the background), header injection
 degrades to "no header" on any error, and `shutdown()` caps its final flush
 at 5 seconds.
+
+## Known limitations (0.1.x)
+
+- **Worker threads:** the LLM-run context that drives exact span attribution
+  is a `ContextVar`; threads you spawn yourself (e.g. `ThreadPoolExecutor`)
+  don't inherit it, so bare `llm.invoke()` calls made inside such threads
+  fall back to trace-level (not span-exact) attribution. LangChain's own
+  `batch()`/async paths propagate context correctly.
+- **Existing OpenInference instrumentation (e.g. Phoenix):** if
+  `LangChainInstrumentor` is already active, `instrument()` adds trace
+  propagation but leaves span export with your existing setup; pass
+  `tracer_provider=` to route spans through Netra as well. `shutdown()`
+  never tears down instrumentation it didn't create.
+- **Redirects:** `traceparent` is injected before the request is sent; if
+  the gateway host redirects off-host, the header follows the redirect.

@@ -12,6 +12,18 @@ class NetraConfigError(ValueError):
     """Raised for unusable configuration (e.g. no API key anywhere)."""
 
 
+def normalize_netloc(netloc: str, scheme: str) -> str:
+    """Lowercase and strip the scheme's default port so config-side and
+    request-side host comparisons agree (post-review S-I4: httpx normalizes
+    URLs, so "HOST:443" in the endpoint would silently disable injection)."""
+    host = netloc.lower()
+    if scheme == "https" and host.endswith(":443"):
+        host = host[: -len(":443")]
+    elif scheme == "http" and host.endswith(":80"):
+        host = host[: -len(":80")]
+    return host
+
+
 @dataclass(frozen=True)
 class Config:
     api_key: str
@@ -34,7 +46,8 @@ def resolve(
             "or set NETRA_API_KEY"
         )
     ep = (endpoint or os.environ.get("NETRA_OTEL_ENDPOINT") or DEFAULT_ENDPOINT).rstrip("/")
-    host = urlparse(ep).netloc
+    parsed = urlparse(ep)
+    host = normalize_netloc(parsed.netloc, parsed.scheme)
     if not host:
         raise NetraConfigError(f"invalid OTLP endpoint: {ep!r}")
     return Config(

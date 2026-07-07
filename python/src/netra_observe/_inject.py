@@ -46,7 +46,11 @@ def _current_context():
 
 def _inject(request: httpx.Request) -> None:
     try:
-        if _gateway_host is None or request.url.netloc.decode() != _gateway_host:
+        from ._config import normalize_netloc
+
+        if _gateway_host is None or normalize_netloc(
+            request.url.netloc.decode(), request.url.scheme
+        ) != _gateway_host:
             return
         ctx = _current_context()
         if ctx is None and not trace_api.get_current_span().get_span_context().is_valid:
