@@ -10,6 +10,8 @@ from opentelemetry.sdk.trace import TracerProvider
 from ._config import Config, NetraConfigError, resolve
 from ._inject import install, uninstall
 from ._provider import build_provider
+from ._runholder import activate as _activate_runholder
+from ._runholder import deactivate as _deactivate_runholder
 
 __version__ = "0.1.0"
 __all__ = ["instrument", "NetraInstrumentation", "NetraConfigError", "__version__"]
@@ -39,6 +41,7 @@ class NetraInstrumentation:
             LangChainInstrumentor().uninstrument()
         except Exception:
             logger.debug("uninstrument failed", exc_info=True)
+        _deactivate_runholder()
         uninstall()
         self.flush()
         if self._owns_provider:
@@ -75,6 +78,7 @@ def instrument(
         else:
             provider, owns = build_provider(cfg), True
         LangChainInstrumentor().instrument(tracer_provider=provider)
+        _activate_runholder()
         install(cfg.gateway_host)
         _active = NetraInstrumentation(provider, owns)
         return _active
@@ -91,4 +95,5 @@ def _reset_for_tests() -> None:
             LangChainInstrumentor().uninstrument()
         except Exception:
             pass
+        _deactivate_runholder()
         uninstall()

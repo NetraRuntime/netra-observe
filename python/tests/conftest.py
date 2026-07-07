@@ -15,6 +15,13 @@ class _Capture(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(b"ok")
 
+    def do_POST(self):  # noqa: N802 - ChatOpenAI POSTs /v1/chat/completions
+        self.rfile.read(int(self.headers.get("Content-Length") or 0))
+        _Capture.captured.append(dict(self.headers))
+        self.send_response(500)
+        self.end_headers()
+        self.wfile.write(b"{}")
+
     def log_message(self, *a):  # silence
         pass
 

@@ -89,3 +89,45 @@ def test_langchain_run_span_wins_over_ambient(capture_server):
     run_span = exporter.get_finished_spans()[0]
     assert format(run_span.context.trace_id, "032x") in tp
     assert format(run_span.context.span_id, "016x") in tp
+
+
+def test_bare_chat_model_invoke_tags_the_llm_span(capture_server):
+    """A BARE llm.invoke() (no surrounding chain — LangChain's config
+    contextvar is unset) must still inject a traceparent carrying the
+    OpenInference LLM span's ids. This is the exact prod-e2e failure mode:
+    get_current_span() only works under a parent runnable, so the run-holder
+    callback is the source of truth."""
+    from langchain_openai import ChatOpenAI
+    from openinference.instrumentation.langchain import LangChainInstrumentor
+
+    from netra_observe._runholder import activate, deactivate
+
+    host, captured = capture_server
+    exporter = InMemorySpanExporter()
+    provider = TracerProvider()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    LangChainInstrumentor().instrument(tracer_provider=provider)
+    activate()
+    try:
+        install(host)
+        llm = ChatOpenAI(
+            model="m",
+            base_url=f"http://{host}/v1",
+            api_key="sk_live_x",
+            max_retries=0,
+        )
+        with pytest.raises(Exception):
+            llm.invoke("hi")  # capture server answers GETs only → client errors
+    finally:
+        deactivate()
+        LangChainInstrumentor().uninstrument()
+
+    tp = next(
+        (h.get("traceparent") for h in captured if "traceparent" in h), None
+    )
+    assert tp is not None, "bare invoke sent no traceparent"
+    llm_spans = [s for s in exporter.get_finished_spans() if s.name == "ChatOpenAI"]
+    assert llm_spans, "OpenInference did not produce a ChatOpenAI span"
+    span = llm_spans[0]
+    assert format(span.context.trace_id, "032x") in tp
+    assert format(span.context.span_id, "016x") in tp

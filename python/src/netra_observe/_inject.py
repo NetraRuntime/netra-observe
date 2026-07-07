@@ -15,17 +15,32 @@ _gateway_host: Optional[str] = None
 
 
 def _current_context():
-    """Injection context: the OpenInference span for the current LangChain
-    run when inside one (OpenInference keeps spans OUT of ambient context by
-    design), else the ambient context. Never raises."""
+    """Injection context, best source first (never raises):
+    1. The OpenInference span for the LLM run recorded by our run-holder
+       callback — exact in both bare-invoke and in-chain shapes.
+    2. OpenInference's get_current_span() — inside a parent runnable this is
+       the surrounding run's span (right trace, coarser node).
+    3. None => propagate.inject falls back to ambient context.
+    OpenInference keeps its spans OUT of ambient context by design, which is
+    why 1 and 2 exist at all."""
     try:
-        from openinference.instrumentation.langchain import get_current_span
+        from openinference.instrumentation.langchain import (
+            LangChainInstrumentor,
+            get_current_span,
+        )
 
+        from ._runholder import current_llm_run_id
+
+        run_id = current_llm_run_id()
+        if run_id is not None:
+            span = LangChainInstrumentor().get_span(run_id)
+            if span is not None:
+                return trace_api.set_span_in_context(span)
         span = get_current_span()
         if span is not None:
             return trace_api.set_span_in_context(span)
     except Exception:  # pragma: no cover - defensive
-        logger.debug("get_current_span failed", exc_info=True)
+        logger.debug("injection context resolution failed", exc_info=True)
     return None  # None => propagate.inject uses ambient context
 
 
