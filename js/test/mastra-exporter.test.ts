@@ -159,6 +159,35 @@ describe("NetraExporter", () => {
         expect(globalThis.fetch).toBe(origFetch)
     })
 
+    it("reverse-order teardown: the first exporter's shutdown leaves the patch installed for the survivor", async () => {
+        const cap = await capture()
+        mockResolveCurrentSpan.mockReturnValue({
+            traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
+            id: "00f067aa0ba902b7",
+        })
+        const opts = { apiKey: "k", endpoint: `http://${cap.host}/otel` }
+        const first = new NetraExporter(opts)
+        const patched = globalThis.fetch
+        const second = new NetraExporter(opts)
+        expect(globalThis.fetch).toBe(patched)
+
+        // Out-of-order teardown: the FIRST exporter shuts down first.
+        await first.shutdown()
+        expect(globalThis.fetch).not.toBe(origFetch)
+        expect(globalThis.fetch).toBe(patched)
+
+        // The survivor's join still works — the gateway request still
+        // carries the traceparent.
+        await fetch(`http://${cap.host}/v1/chat/completions`)
+        expect(cap.got[0]["traceparent"]).toBe(
+            "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+        )
+
+        await second.shutdown()
+        expect(globalThis.fetch).toBe(origFetch)
+        cap.close()
+    })
+
     it("a sibling's shutdown does not remove the shared span source needed by a surviving exporter's join", async () => {
         const cap = await capture()
         mockResolveCurrentSpan.mockReturnValue({

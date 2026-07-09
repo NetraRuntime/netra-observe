@@ -95,7 +95,7 @@ export function instrument(args: InstrumentArgs = {}): NetraInstrumentation {
         tracerProvider: provider,
     })
 
-    const ownsPatch = install(cfg.gatewayHost)
+    install(cfg.gatewayHost)
 
     active = {
         provider,
@@ -117,7 +117,7 @@ export function instrument(args: InstrumentArgs = {}): NetraInstrumentation {
             } catch {
                 /* ignore */
             }
-            if (ownsPatch) uninstall()
+            uninstall()
             await this.flush()
             try {
                 await provider.shutdown()

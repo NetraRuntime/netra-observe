@@ -40,28 +40,30 @@ describe("instrument", () => {
         expect(sc?.spanId).toBe(span.spanContext().spanId)
     })
 
-    it("does not uninstall a fetch patch it does not own", async () => {
+    it("shutdown leaves the patch installed while another installer is live", async () => {
         const original = globalThis.fetch
-        // Simulate a prior owner of the fetch patch (e.g. a live
-        // NetraExporter) that installed before instrument() ran.
-        expect(install("some-host")).toBe(true)
+        // Simulate a prior installer of the fetch patch (e.g. a live
+        // NetraExporter) that installed before instrument() ran. Ref count: 1.
+        install("some-host")
         const priorPatched = globalThis.fetch
         expect(priorPatched).not.toBe(original)
 
+        // instrument()'s install() retargets the host and bumps the ref
+        // count to 2 — the existing patch identity is unchanged.
         handle = instrument({
             apiKey: "ntr_k",
             endpoint: "http://localhost:9/v1/otel",
         })
-        // install() is idempotent — instrument()'s call retargeted the host
-        // but did not perform a new patch, so it does not own it.
         expect(globalThis.fetch).toBe(priorPatched)
 
+        // instrument()'s shutdown() decrements to 1 — the patch, shared with
+        // the still-live prior installer, must remain.
         await handle.shutdown()
         handle = null
-        // The patch instrument() doesn't own must survive its shutdown.
         expect(globalThis.fetch).toBe(priorPatched)
 
-        // The prior owner's uninstall() still restores the original fetch.
+        // The prior installer's own uninstall() brings the count to 0 and
+        // restores the original fetch.
         uninstall()
         expect(globalThis.fetch).toBe(original)
     })

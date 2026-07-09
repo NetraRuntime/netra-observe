@@ -158,12 +158,23 @@ describe("inject", () => {
         cap.close()
     })
 
-    it("install returns true only for the call that patched", () => {
-        expect(install("h1")).toBe(true)
-        expect(install("h2")).toBe(false)
+    it("nested installs: fetch restored only when every install has been uninstalled", () => {
+        const original = globalThis.fetch
+        install("h1")
+        const patched = globalThis.fetch
+        expect(patched).not.toBe(original)
+
+        install("h2")
+        expect(globalThis.fetch).toBe(patched)
+
         uninstall()
-        expect(install("h3")).toBe(true)
+        expect(globalThis.fetch).toBe(patched)
+
         uninstall()
+        expect(globalThis.fetch).toBe(original)
+
+        uninstall()
+        expect(globalThis.fetch).toBe(original)
     })
 
     it("ref-counts a source added twice: one remove leaves it active, second clears it", async () => {

@@ -44,7 +44,7 @@ export class NetraExporter implements ObservabilityExporter {
 
     private processor: BatchSpanProcessor | null = null
     private resource: Resource | null = null
-    private ownsPatch = false
+    private installed = false
     private addedSource = false
 
     constructor(options: NetraExporterOptions = {}) {
@@ -62,7 +62,8 @@ export class NetraExporter implements ObservabilityExporter {
         }
         this.processor = buildProcessor(cfg)
         this.resource = buildResource(cfg)
-        this.ownsPatch = install(cfg.gatewayHost)
+        install(cfg.gatewayHost)
+        this.installed = true
         addSpanContextSource(mastraSpanContext)
         this.addedSource = true
     }
@@ -98,9 +99,9 @@ export class NetraExporter implements ObservabilityExporter {
             removeSpanContextSource(mastraSpanContext)
             this.addedSource = false
         }
-        if (this.ownsPatch) {
+        if (this.installed) {
             uninstall()
-            this.ownsPatch = false
+            this.installed = false
         }
         try {
             await this.processor?.shutdown()

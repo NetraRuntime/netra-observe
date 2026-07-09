@@ -7,6 +7,7 @@ export type SpanContextSource = () =>
 
 let original: typeof globalThis.fetch | null = null
 let gatewayHost: string | null = null
+let installCount = 0
 let sources: SpanContextSource[] = []
 const sourceRefCounts = new Map<SpanContextSource, number>()
 
@@ -73,13 +74,17 @@ function traceparentHeaders(base?: HeadersInit): Headers {
 }
 
 /** Patch global fetch to inject the current LLM span's traceparent on
- * requests to the gateway host. Idempotent — a second call just retargets
- * the host and returns false; true means this call performed the patch
- * (its caller owns the eventual uninstall()). Never throws into the
- * caller; on any error the request goes out untouched. */
-export function install(host: string): boolean {
+ * requests to the gateway host. Ref-counted: every install() must be paired
+ * with an uninstall() — the host is retargeted on every call, but the patch
+ * itself is only applied on the 0→1 transition, and only removed once every
+ * installer has called uninstall(). This lets multiple independent owners
+ * (e.g. several NetraExporters) share one patch without racing each other's
+ * teardown. Never throws into the caller; on any error the request goes out
+ * untouched. */
+export function install(host: string): void {
     gatewayHost = host
-    if (original) return false
+    installCount++
+    if (original) return
     original = globalThis.fetch
     const orig = original
     globalThis.fetch = function patched(
@@ -105,10 +110,15 @@ export function install(host: string): boolean {
         }
         return orig(input, init)
     } as typeof globalThis.fetch
-    return true
 }
 
+/** Decrement the install ref count, restoring the original fetch and
+ * clearing the gateway host once every installer has called this. A call
+ * with the count already at 0 is a safe no-op. */
 export function uninstall(): void {
+    if (installCount === 0) return
+    installCount--
+    if (installCount > 0) return
     if (original) {
         globalThis.fetch = original
         original = null
