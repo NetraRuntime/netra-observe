@@ -137,6 +137,9 @@ describe("convertSpan", () => {
             "rate limited"
         )
         expect(s.events[0].attributes?.["exception.type"]).toBe("APIError")
+        expect(s.events[0].attributes?.["exception.stacktrace"]).toBe(
+            "APIError: rate limited\n  at x"
+        )
     })
 
     it("event span (no endTime) → zero duration, still ended", () => {
@@ -153,5 +156,47 @@ describe("convertSpan", () => {
         const s = convertSpan(base(), resource)
         expect(s.startTime).toEqual([Math.floor(T0.getTime() / 1000), 0])
         expect(s.duration).toEqual([1, 500_000_000])
+    })
+
+    it("rag_embedding → EMBEDDING and rag_vector_operation → RETRIEVER", () => {
+        const e = convertSpan(base({ type: SpanType.RAG_EMBEDDING }), resource)
+        expect(e.attributes["openinference.span.kind"]).toBe("EMBEDDING")
+        const r = convertSpan(
+            base({ type: SpanType.RAG_VECTOR_OPERATION }),
+            resource
+        )
+        expect(r.attributes["openinference.span.kind"]).toBe("RETRIEVER")
+    })
+
+    it("circular input/metadata/parameters are dropped, span kept, no throw", () => {
+        const circular: Record<string, unknown> = {}
+        circular.self = circular
+        const s = convertSpan(
+            base({
+                type: SpanType.MODEL_GENERATION,
+                input: circular,
+                metadata: { c: circular },
+                attributes: { parameters: { c: circular } },
+            }),
+            resource
+        )
+        expect(s.attributes["input.value"]).toBeUndefined()
+        expect(s.attributes["input.mime_type"]).toBeUndefined()
+        expect(s.attributes["metadata"]).toBeUndefined()
+        expect(s.attributes["llm.invocation_parameters"]).toBeUndefined()
+        expect(s.spanContext().spanId).toBe("00f067aa0ba902b7")
+    })
+
+    it("partial usage: only inputTokens → prompt and total set, completion absent", () => {
+        const s = convertSpan(
+            base({
+                type: SpanType.MODEL_GENERATION,
+                attributes: { usage: { inputTokens: 5 } },
+            }),
+            resource
+        )
+        expect(s.attributes["llm.token_count.prompt"]).toBe(5)
+        expect(s.attributes["llm.token_count.completion"]).toBeUndefined()
+        expect(s.attributes["llm.token_count.total"]).toBe(5)
     })
 })
