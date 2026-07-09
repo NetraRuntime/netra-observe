@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from "vitest"
+import { describe, it, expect, afterEach, vi } from "vitest"
 import { createServer, type Server } from "node:http"
 import { Agent } from "@mastra/core/agent"
 import { Mastra } from "@mastra/core/mastra"
@@ -92,9 +92,6 @@ describe("mastra spike: ambient span at model-call fetch time", () => {
         })
 
         await mastra.getAgent("spike").generate("hello")
-        // SPAN_ENDED delivery can lag the generate() return by a tick.
-        await new Promise((r) => setTimeout(r, 200))
-        gw.close()
 
         // The model call hit our gateway with an ambient Mastra span.
         const gwCalls = seen.filter((s) =>
@@ -105,6 +102,21 @@ describe("mastra spike: ambient span at model-call fetch time", () => {
         expect(ambient).toBeDefined()
         expect(ambient!.traceId).toMatch(/^[0-9a-f]{32}$/)
         expect(ambient!.id).toMatch(/^[0-9a-f]{16}$/)
+
+        // SPAN_ENDED delivery can lag the generate() return by a tick — poll
+        // until the exported span for the ambient trace arrives.
+        await vi.waitFor(
+            () => {
+                const ended = events
+                    .filter((e) => e.type === TracingEventType.SPAN_ENDED)
+                    .map((e) => e.exportedSpan)
+                expect(
+                    ended.some((s) => s.traceId === ambient!.traceId)
+                ).toBe(true)
+            },
+            { timeout: 2000 }
+        )
+        gw.close()
 
         // The ambient span belongs to the same trace as the exported spans.
         const ended = events

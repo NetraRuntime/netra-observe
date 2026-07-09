@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from "vitest"
+import { describe, it, expect, afterEach, vi } from "vitest"
 import { createServer, type Server } from "node:http"
 import type { IncomingHttpHeaders } from "node:http"
 import { Agent } from "@mastra/core/agent"
@@ -108,7 +108,15 @@ describe("mastra e2e: export + gateway join", () => {
         })
 
         await mastra.getAgent("e2e").generate("hello")
-        await new Promise((r) => setTimeout(r, 200))
+        // SPAN_ENDED delivery can lag the generate() return by a tick — poll
+        // until both the gateway call and the exported span have landed.
+        await vi.waitFor(
+            () => {
+                expect(netra.chat.length).toBeGreaterThan(0)
+                expect(ended.length).toBeGreaterThan(0)
+            },
+            { timeout: 2000 }
+        )
 
         // Join lane: the model call carried a traceparent…
         expect(netra.chat.length).toBeGreaterThan(0)
