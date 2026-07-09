@@ -38,7 +38,12 @@ export function resolveConfig(opts: InstrumentOptions = {}): NetraConfig {
     const raw =
         opts.endpoint ?? process.env.NETRA_OTEL_ENDPOINT ?? DEFAULT_ENDPOINT
     const endpoint = raw.replace(/\/+$/, "")
-    const u = new URL(endpoint)
+    let u: URL
+    try {
+        u = new URL(endpoint)
+    } catch {
+        throw new NetraConfigError(`invalid OTLP endpoint: ${endpoint}`)
+    }
     const gatewayHost = normalizeHost(u.host, u.protocol)
     if (!gatewayHost) {
         throw new NetraConfigError(`invalid OTLP endpoint: ${endpoint}`)

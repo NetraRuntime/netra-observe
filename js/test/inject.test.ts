@@ -3,7 +3,12 @@ import { createServer, type Server } from "node:http"
 
 vi.mock("../src/context.js", () => ({ activeSpanContext: vi.fn() }))
 import { activeSpanContext } from "../src/context.js"
-import { install, uninstall } from "../src/inject.js"
+import {
+    install,
+    uninstall,
+    addSpanContextSource,
+    removeSpanContextSource,
+} from "../src/inject.js"
 
 function capture(): Promise<{
     host: string
@@ -95,5 +100,129 @@ describe("inject", () => {
         expect(globalThis.fetch).toBe(original)
         uninstall()
         expect(globalThis.fetch).toBe(original)
+    })
+
+    it("prefers an added source over the OTel active span", async () => {
+        const cap = await capture()
+        mockActive.mockReturnValue({
+            traceId: "a".repeat(32),
+            spanId: "b".repeat(16),
+        })
+        const source = () => ({
+            traceId: "1".repeat(32),
+            spanId: "2".repeat(16),
+        })
+        addSpanContextSource(source)
+        install(cap.host)
+        await fetch(`http://${cap.host}/x`)
+        removeSpanContextSource(source)
+        expect(cap.got[0]["traceparent"]).toBe(
+            `00-${"1".repeat(32)}-${"2".repeat(16)}-01`
+        )
+        cap.close()
+    })
+
+    it("falls back to the OTel active span when sources return undefined", async () => {
+        const cap = await capture()
+        mockActive.mockReturnValue({
+            traceId: "a".repeat(32),
+            spanId: "b".repeat(16),
+        })
+        const source = () => undefined
+        addSpanContextSource(source)
+        install(cap.host)
+        await fetch(`http://${cap.host}/x`)
+        removeSpanContextSource(source)
+        expect(cap.got[0]["traceparent"]).toBe(
+            `00-${"a".repeat(32)}-${"b".repeat(16)}-01`
+        )
+        cap.close()
+    })
+
+    it("a throwing source is skipped, not fatal", async () => {
+        const cap = await capture()
+        mockActive.mockReturnValue({
+            traceId: "a".repeat(32),
+            spanId: "b".repeat(16),
+        })
+        const source = () => {
+            throw new Error("boom")
+        }
+        addSpanContextSource(source)
+        install(cap.host)
+        await fetch(`http://${cap.host}/x`)
+        removeSpanContextSource(source)
+        expect(cap.got[0]["traceparent"]).toBe(
+            `00-${"a".repeat(32)}-${"b".repeat(16)}-01`
+        )
+        cap.close()
+    })
+
+    it("nested installs: fetch restored only when every install has been uninstalled", () => {
+        const original = globalThis.fetch
+        install("h1")
+        const patched = globalThis.fetch
+        expect(patched).not.toBe(original)
+
+        install("h2")
+        expect(globalThis.fetch).toBe(patched)
+
+        uninstall()
+        expect(globalThis.fetch).toBe(patched)
+
+        uninstall()
+        expect(globalThis.fetch).toBe(original)
+
+        uninstall()
+        expect(globalThis.fetch).toBe(original)
+    })
+
+    it("ref-counts a source added twice: one remove leaves it active, second clears it", async () => {
+        const cap = await capture()
+        mockActive.mockReturnValue({
+            traceId: "a".repeat(32),
+            spanId: "b".repeat(16),
+        })
+        const source = () => ({
+            traceId: "1".repeat(32),
+            spanId: "2".repeat(16),
+        })
+        addSpanContextSource(source)
+        addSpanContextSource(source)
+        install(cap.host)
+
+        removeSpanContextSource(source)
+        await fetch(`http://${cap.host}/x`)
+        expect(cap.got[0]["traceparent"]).toBe(
+            `00-${"1".repeat(32)}-${"2".repeat(16)}-01`
+        )
+
+        removeSpanContextSource(source)
+        await fetch(`http://${cap.host}/x`)
+        expect(cap.got[1]["traceparent"]).toBe(
+            `00-${"a".repeat(32)}-${"b".repeat(16)}-01`
+        )
+
+        cap.close()
+    })
+
+    it("removing a source that was never added is a no-op", async () => {
+        const cap = await capture()
+        mockActive.mockReturnValue({
+            traceId: "a".repeat(32),
+            spanId: "b".repeat(16),
+        })
+        const untouched = () => ({
+            traceId: "1".repeat(32),
+            spanId: "2".repeat(16),
+        })
+        // no addSpanContextSource(untouched) call
+        removeSpanContextSource(untouched)
+        install(cap.host)
+        await fetch(`http://${cap.host}/x`)
+        expect(cap.got[0]["traceparent"]).toBe(
+            `00-${"a".repeat(32)}-${"b".repeat(16)}-01`
+        )
+        cap.close()
     })
 })
