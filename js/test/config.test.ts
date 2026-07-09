@@ -45,4 +45,9 @@ describe("resolveConfig", () => {
     it("throws without an api key", () => {
         expect(() => resolveConfig()).toThrow(NetraConfigError)
     })
+    it("throws NetraConfigError (not TypeError) for a malformed endpoint", () => {
+        expect(() =>
+            resolveConfig({ apiKey: "k", endpoint: "not a url" })
+        ).toThrow(NetraConfigError)
+    })
 })

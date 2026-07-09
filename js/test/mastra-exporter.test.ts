@@ -1,7 +1,44 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
-import { SpanType, TracingEventType } from "@mastra/core/observability"
+
+vi.mock("@mastra/core/observability", async (importOriginal) => {
+    const actual =
+        await importOriginal<typeof import("@mastra/core/observability")>()
+    return { ...actual, resolveCurrentSpan: vi.fn() }
+})
+import {
+    SpanType,
+    TracingEventType,
+    resolveCurrentSpan,
+} from "@mastra/core/observability"
 import type { AnyExportedSpan, TracingEvent } from "@mastra/core/observability"
+import { createServer, type Server } from "node:http"
 import { NetraExporter } from "../src/mastra/index.js"
+
+const mockResolveCurrentSpan = resolveCurrentSpan as unknown as ReturnType<
+    typeof vi.fn
+>
+
+function capture(): Promise<{
+    host: string
+    got: Record<string, string | string[] | undefined>[]
+    close: () => void
+}> {
+    return new Promise((resolve) => {
+        const got: Record<string, string | string[] | undefined>[] = []
+        const srv: Server = createServer((req, res) => {
+            got.push(req.headers)
+            res.writeHead(200).end("ok")
+        })
+        srv.listen(0, "127.0.0.1", () => {
+            const port = (srv.address() as { port: number }).port
+            resolve({
+                host: `127.0.0.1:${port}`,
+                got,
+                close: () => srv.close(),
+            })
+        })
+    })
+}
 
 const OPTS = { apiKey: "k", endpoint: "http://127.0.0.1:1/otel" }
 
@@ -42,6 +79,7 @@ afterEach(async () => {
     warn.mockRestore()
     vi.unstubAllEnvs()
     globalThis.fetch = origFetch
+    mockResolveCurrentSpan.mockReset()
 })
 
 describe("NetraExporter", () => {
@@ -119,5 +157,66 @@ describe("NetraExporter", () => {
         expect(globalThis.fetch).toBe(patched)
         await first.shutdown()
         expect(globalThis.fetch).toBe(origFetch)
+    })
+
+    it("a sibling's shutdown does not remove the shared span source needed by a surviving exporter's join", async () => {
+        const cap = await capture()
+        mockResolveCurrentSpan.mockReturnValue({
+            traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
+            id: "00f067aa0ba902b7",
+        })
+        const opts = { apiKey: "k", endpoint: `http://${cap.host}/otel` }
+        // owner is created first, so it owns the fetch patch; sibling shares
+        // both the patch and the (dedup-on-identity) mastraSpanContext source.
+        const owner = new NetraExporter(opts)
+        const sibling = new NetraExporter(opts)
+
+        await sibling.shutdown()
+
+        // Without the ref-count fix, sibling.shutdown() would have removed
+        // mastraSpanContext outright, and owner's join would silently fall
+        // back to the (absent) OTel active span — no traceparent header.
+        await fetch(`http://${cap.host}/v1/chat/completions`)
+        expect(cap.got[0]["traceparent"]).toBe(
+            "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+        )
+
+        await owner.shutdown()
+        expect(globalThis.fetch).toBe(origFetch)
+        cap.close()
+    })
+
+    it("a disabled exporter's shutdown does not remove a healthy sibling's span source", async () => {
+        const cap = await capture()
+        mockResolveCurrentSpan.mockReturnValue({
+            traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
+            id: "00f067aa0ba902b7",
+        })
+        const healthy = new NetraExporter({
+            apiKey: "k",
+            endpoint: `http://${cap.host}/otel`,
+        })
+        // NETRA_API_KEY is stubbed to "" in beforeEach, so this constructor
+        // hits the resolveConfig() catch branch and returns before ever
+        // calling addSpanContextSource().
+        const disabled = new NetraExporter()
+        expect(warn).toHaveBeenCalledTimes(1)
+
+        await disabled.shutdown()
+
+        await fetch(`http://${cap.host}/v1/chat/completions`)
+        expect(cap.got[0]["traceparent"]).toBe(
+            "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+        )
+
+        await healthy.shutdown()
+        cap.close()
+    })
+
+    it("malformed endpoint: warns once, disabled, never throws, no patch", async () => {
+        const exp = new NetraExporter({ apiKey: "k", endpoint: "not a url" })
+        expect(warn).toHaveBeenCalledTimes(1)
+        expect(globalThis.fetch).toBe(origFetch)
+        await expect(exp.shutdown()).resolves.toBeUndefined()
     })
 })

@@ -8,6 +8,7 @@ export type SpanContextSource = () =>
 let original: typeof globalThis.fetch | null = null
 let gatewayHost: string | null = null
 let sources: SpanContextSource[] = []
+const sourceRefCounts = new Map<SpanContextSource, number>()
 
 function requestHost(input: RequestInfo | URL): string | null {
     try {
@@ -26,13 +27,28 @@ function requestHost(input: RequestInfo | URL): string | null {
 
 /** Register an additional span-context source consulted BEFORE the OTel
  * active span (FIFO among added sources). Used by the Mastra integration,
- * whose spans are not OTel-active. */
+ * whose spans are not OTel-active. Ref-counted: multiple callers may add the
+ * same source (by function identity) — it stays registered until every
+ * caller has removed it, so one owner's removeSpanContextSource() can't
+ * silently kill a sibling's still-live registration. */
 export function addSpanContextSource(src: SpanContextSource): void {
-    if (!sources.includes(src)) sources.push(src)
+    const count = sourceRefCounts.get(src) ?? 0
+    if (count === 0) sources.push(src)
+    sourceRefCounts.set(src, count + 1)
 }
 
+/** Decrement the source's ref count, removing it once the count reaches 0.
+ * A remove without a prior add is a no-op — it never goes negative and
+ * never removes a source it didn't register. */
 export function removeSpanContextSource(src: SpanContextSource): void {
-    sources = sources.filter((s) => s !== src)
+    const count = sourceRefCounts.get(src)
+    if (!count) return
+    if (count === 1) {
+        sourceRefCounts.delete(src)
+        sources = sources.filter((s) => s !== src)
+    } else {
+        sourceRefCounts.set(src, count - 1)
+    }
 }
 
 function currentSpanContext():

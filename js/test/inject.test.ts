@@ -165,4 +165,53 @@ describe("inject", () => {
         expect(install("h3")).toBe(true)
         uninstall()
     })
+
+    it("ref-counts a source added twice: one remove leaves it active, second clears it", async () => {
+        const cap = await capture()
+        mockActive.mockReturnValue({
+            traceId: "a".repeat(32),
+            spanId: "b".repeat(16),
+        })
+        const source = () => ({
+            traceId: "1".repeat(32),
+            spanId: "2".repeat(16),
+        })
+        addSpanContextSource(source)
+        addSpanContextSource(source)
+        install(cap.host)
+
+        removeSpanContextSource(source)
+        await fetch(`http://${cap.host}/x`)
+        expect(cap.got[0]["traceparent"]).toBe(
+            `00-${"1".repeat(32)}-${"2".repeat(16)}-01`
+        )
+
+        removeSpanContextSource(source)
+        await fetch(`http://${cap.host}/x`)
+        expect(cap.got[1]["traceparent"]).toBe(
+            `00-${"a".repeat(32)}-${"b".repeat(16)}-01`
+        )
+
+        cap.close()
+    })
+
+    it("removing a source that was never added is a no-op", async () => {
+        const cap = await capture()
+        mockActive.mockReturnValue({
+            traceId: "a".repeat(32),
+            spanId: "b".repeat(16),
+        })
+        const untouched = () => ({
+            traceId: "1".repeat(32),
+            spanId: "2".repeat(16),
+        })
+        // no addSpanContextSource(untouched) call
+        removeSpanContextSource(untouched)
+        install(cap.host)
+        await fetch(`http://${cap.host}/x`)
+        expect(cap.got[0]["traceparent"]).toBe(
+            `00-${"a".repeat(32)}-${"b".repeat(16)}-01`
+        )
+        cap.close()
+    })
 })
