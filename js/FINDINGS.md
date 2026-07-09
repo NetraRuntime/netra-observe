@@ -85,3 +85,12 @@ instrumentation.
 All findings above are reproducible with short scripts run from this directory
 (`node --import ...` for the preload path; `npx tsx` for the inline probes).
 The committed `test/spike.test.ts` is the positive control (CJS `openai@5`).
+
+## Update 2026-07-09: Mastra integration shipped
+
+The Mastra path does not depend on the blocked OpenInference stack and is
+live: `NetraExporter` (`@netra/observe/mastra`) receives spans through
+Mastra's documented exporter interface and reads the ambient span via
+`resolveCurrentSpan()` for the gateway join — no module patching, no
+preload. Spec: `docs/superpowers/specs/2026-07-09-netra-observe-mastra-design.md`.
+The LangChain.js blocker and its robust path forward above remain accurate.
