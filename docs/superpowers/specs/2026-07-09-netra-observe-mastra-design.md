@@ -76,7 +76,8 @@ from the main entry.
      `TOOL`, agent run → `AGENT`, workflow/step/other → `CHAIN`.
    - `input.value` / `output.value` (JSON-stringified when non-string).
    - `llm.model_name`, `llm.token_count.prompt|completion|total` from usage.
-   - `mastra.metadata.*` passthrough; root-span tags as `mastra.tags`.
+   - `metadata` (single JSON-stringified attribute) passthrough; root-span
+     tags as `tag.tags` (string array).
    - Trace/span/parent IDs taken verbatim from the Mastra span.
    - Resource: existing `resource.ts` service attributes.
 
@@ -145,3 +146,7 @@ version, not assumed): the exact exporter interface/type name and whether
 implementing it directly suffices or `BaseExporter` from
 `@mastra/observability` is required; the exact `SpanType` enum members; the
 usage/token field names on model-generation spans.
+
+> Erratum 2026-07-09: attribute names corrected to OpenInference conventions
+> (single `metadata` JSON attribute, `tag.tags`) — the implementation and plan
+> use these; earlier drafts said `mastra.metadata.*`/`mastra.tags`.

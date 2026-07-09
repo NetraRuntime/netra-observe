@@ -8,7 +8,8 @@
     "./mastra": {
       "types": "./dist/mastra/index.d.ts",
       "import": "./dist/mastra/index.js"
-    }
+    },
+    "./package.json": "./package.json"
   },
   "files": ["dist"],
   "type": "module",
@@ -32,10 +33,14 @@
   },
   "peerDependencies": {
     "@mastra/core": "^1.50.0",
+    "@mastra/observability": "^1.16.0",
     "@langchain/core": "^1.0.0"
   },
   "peerDependenciesMeta": {
     "@mastra/core": {
+      "optional": true
+    },
+    "@mastra/observability": {
       "optional": true
     },
     "@langchain/core": {
