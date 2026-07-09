@@ -67,4 +67,34 @@ describe("instrument", () => {
         uninstall()
         expect(globalThis.fetch).toBe(original)
     })
+
+    it("a second shutdown() call is a no-op — it does not over-decrement the shared install ref-count", async () => {
+        const original = globalThis.fetch
+        // External installer, count 1.
+        install("some-host")
+        const priorPatched = globalThis.fetch
+
+        // instrument()'s install() bumps the ref count to 2.
+        handle = instrument({
+            apiKey: "ntr_k",
+            endpoint: "http://localhost:9/v1/otel",
+        })
+        expect(globalThis.fetch).toBe(priorPatched)
+
+        // First shutdown() decrements to 1 — the shared patch survives.
+        await handle.shutdown()
+        expect(globalThis.fetch).toBe(priorPatched)
+
+        // A second shutdown() call must resolve immediately without
+        // re-running uninstall() (which would incorrectly decrement the
+        // ref count to 0 and unpatch fetch out from under the still-live
+        // external installer).
+        await handle.shutdown()
+        expect(globalThis.fetch).toBe(priorPatched)
+        handle = null
+
+        // The external installer's own uninstall() still restores cleanly.
+        uninstall()
+        expect(globalThis.fetch).toBe(original)
+    })
 })

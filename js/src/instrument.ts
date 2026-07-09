@@ -9,7 +9,7 @@ import { resolveConfig, type InstrumentOptions } from "./config.js"
 import { buildProvider } from "./provider.js"
 import { install, uninstall } from "./inject.js"
 
-export const VERSION = "0.1.0"
+export { VERSION } from "./version.js"
 
 export type InstrumentArgs = InstrumentOptions
 
@@ -97,6 +97,15 @@ export function instrument(args: InstrumentArgs = {}): NetraInstrumentation {
 
     install(cfg.gatewayHost)
 
+    // Guards shutdown() re-entry: `active` is nulled out at the end of the
+    // first shutdown, so a second call can't gate on it — it must gate on
+    // this closure-local promise instead. Without this, a second shutdown()
+    // (e.g. an explicit call after `using` already disposed the handle)
+    // would re-run uninstall() and over-decrement the shared install
+    // ref-count in inject.ts, unpatching fetch out from under a still-live
+    // sibling installer.
+    let shutdownPromise: Promise<void> | null = null
+
     active = {
         provider,
         async flush(timeoutMs = 5000): Promise<void> {
@@ -112,23 +121,27 @@ export function instrument(args: InstrumentArgs = {}): NetraInstrumentation {
             }
         },
         async shutdown(): Promise<void> {
-            try {
-                disable()
-            } catch {
-                /* ignore */
-            }
-            uninstall()
-            await this.flush()
-            try {
-                await provider.shutdown()
-            } catch (err) {
-                diag.debug(
-                    `netra-observe: provider shutdown failed: ${
-                        (err as Error).message
-                    }`
-                )
-            }
-            active = null
+            if (shutdownPromise) return shutdownPromise
+            shutdownPromise = (async () => {
+                try {
+                    disable()
+                } catch {
+                    /* ignore */
+                }
+                uninstall()
+                await this.flush()
+                try {
+                    await provider.shutdown()
+                } catch (err) {
+                    diag.debug(
+                        `netra-observe: provider shutdown failed: ${
+                            (err as Error).message
+                        }`
+                    )
+                }
+                active = null
+            })()
+            return shutdownPromise
         },
         async [Symbol.asyncDispose](): Promise<void> {
             await this.shutdown()

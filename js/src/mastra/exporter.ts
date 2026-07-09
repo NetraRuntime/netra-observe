@@ -84,9 +84,14 @@ export class NetraExporter implements ObservabilityExporter {
         }
     }
 
-    async flush(): Promise<void> {
+    async flush(timeoutMs = 5000): Promise<void> {
         try {
-            await this.processor?.forceFlush()
+            if (this.processor) {
+                await Promise.race([
+                    this.processor.forceFlush(),
+                    new Promise<void>((r) => setTimeout(r, timeoutMs)),
+                ])
+            }
         } catch (err) {
             diag.debug(
                 `netra-observe: flush failed: ${(err as Error).message}`
@@ -94,7 +99,7 @@ export class NetraExporter implements ObservabilityExporter {
         }
     }
 
-    async shutdown(): Promise<void> {
+    async shutdown(timeoutMs = 5000): Promise<void> {
         if (this.addedSource) {
             removeSpanContextSource(mastraSpanContext)
             this.addedSource = false
@@ -104,7 +109,12 @@ export class NetraExporter implements ObservabilityExporter {
             this.installed = false
         }
         try {
-            await this.processor?.shutdown()
+            if (this.processor) {
+                await Promise.race([
+                    this.processor.shutdown(),
+                    new Promise<void>((r) => setTimeout(r, timeoutMs)),
+                ])
+            }
         } catch (err) {
             diag.debug(
                 `netra-observe: exporter shutdown failed: ${

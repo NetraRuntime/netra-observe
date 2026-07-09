@@ -5,7 +5,7 @@ import type { ReadableSpan, TimedEvent } from "@opentelemetry/sdk-trace-base"
 import { SpanType } from "@mastra/core/observability"
 import type { AnyExportedSpan } from "@mastra/core/observability"
 
-import { VERSION } from "../instrument.js"
+import { VERSION } from "../version.js"
 
 const SCOPE = { name: "@netra/observe/mastra", version: VERSION }
 

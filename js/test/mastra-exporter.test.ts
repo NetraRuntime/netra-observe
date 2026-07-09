@@ -242,6 +242,19 @@ describe("NetraExporter", () => {
         cap.close()
     })
 
+    it("flush and shutdown are bounded by a timeout — a hung processor does not hang them", async () => {
+        const exp = new NetraExporter(OPTS)
+        const proc = {
+            onEnd: vi.fn(),
+            forceFlush: vi.fn(() => new Promise<void>(() => {})),
+            shutdown: vi.fn(() => new Promise<void>(() => {})),
+        }
+        ;(exp as any).processor = proc
+
+        await expect(exp.flush(50)).resolves.toBeUndefined()
+        await expect(exp.shutdown(50)).resolves.toBeUndefined()
+    })
+
     it("malformed endpoint: warns once, disabled, never throws, no patch", async () => {
         const exp = new NetraExporter({ apiKey: "k", endpoint: "not a url" })
         expect(warn).toHaveBeenCalledTimes(1)
