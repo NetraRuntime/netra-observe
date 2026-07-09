@@ -1,8 +1,13 @@
 import { normalizeHost } from "./config.js"
 import { activeSpanContext } from "./context.js"
 
+export type SpanContextSource = () =>
+    | { traceId: string; spanId: string }
+    | undefined
+
 let original: typeof globalThis.fetch | null = null
 let gatewayHost: string | null = null
+let sources: SpanContextSource[] = []
 
 function requestHost(input: RequestInfo | URL): string | null {
     try {
@@ -19,19 +24,46 @@ function requestHost(input: RequestInfo | URL): string | null {
     }
 }
 
+/** Register an additional span-context source consulted BEFORE the OTel
+ * active span (FIFO among added sources). Used by the Mastra integration,
+ * whose spans are not OTel-active. */
+export function addSpanContextSource(src: SpanContextSource): void {
+    if (!sources.includes(src)) sources.push(src)
+}
+
+export function removeSpanContextSource(src: SpanContextSource): void {
+    sources = sources.filter((s) => s !== src)
+}
+
+function currentSpanContext():
+    | { traceId: string; spanId: string }
+    | undefined {
+    for (const src of sources) {
+        try {
+            const sc = src()
+            if (sc) return sc
+        } catch {
+            /* a broken source must not break the request */
+        }
+    }
+    return activeSpanContext()
+}
+
 function traceparentHeaders(base?: HeadersInit): Headers {
     const headers = new Headers(base)
-    const sc = activeSpanContext()
+    const sc = currentSpanContext()
     if (sc) headers.set("traceparent", `00-${sc.traceId}-${sc.spanId}-01`)
     return headers
 }
 
-/** Patch global fetch to inject the active LLM span's traceparent on requests
- * to the gateway host. Idempotent — a second call just retargets the host.
- * Never throws into the caller; on any error the request goes out untouched. */
-export function install(host: string): void {
+/** Patch global fetch to inject the current LLM span's traceparent on
+ * requests to the gateway host. Idempotent — a second call just retargets
+ * the host and returns false; true means this call performed the patch
+ * (its caller owns the eventual uninstall()). Never throws into the
+ * caller; on any error the request goes out untouched. */
+export function install(host: string): boolean {
     gatewayHost = host
-    if (original) return
+    if (original) return false
     original = globalThis.fetch
     const orig = original
     globalThis.fetch = function patched(
@@ -57,6 +89,7 @@ export function install(host: string): void {
         }
         return orig(input, init)
     } as typeof globalThis.fetch
+    return true
 }
 
 export function uninstall(): void {
