@@ -1,8 +1,16 @@
 {
   "name": "@netra/observe",
   "version": "0.1.0",
-  "description": "One-line LangChain.js observability for Netra Runtime.",
+  "description": "One-line LLM observability for Netra Runtime — Mastra and LangChain.js.",
   "license": "Apache-2.0",
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" },
+    "./mastra": {
+      "types": "./dist/mastra/index.d.ts",
+      "import": "./dist/mastra/index.js"
+    }
+  },
+  "files": ["dist"],
   "type": "module",
   "engines": {
     "node": ">=18"
@@ -23,9 +31,13 @@
     "import-in-the-middle": "^3.3.1"
   },
   "peerDependencies": {
+    "@mastra/core": "^1.50.0",
     "@langchain/core": "^1.0.0"
   },
   "peerDependenciesMeta": {
+    "@mastra/core": {
+      "optional": true
+    },
     "@langchain/core": {
       "optional": true
     }
