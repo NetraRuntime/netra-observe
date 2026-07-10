@@ -30,6 +30,7 @@ class Config:
     endpoint: str
     gateway_host: str
     project: Optional[str]
+    agent: Optional[str]
     environment: Optional[str]
 
 
@@ -38,6 +39,7 @@ def resolve(
     project: Optional[str] = None,
     environment: Optional[str] = None,
     endpoint: Optional[str] = None,
+    agent: Optional[str] = None,
 ) -> Config:
     key = api_key or os.environ.get("NETRA_API_KEY")
     if not key:
@@ -55,5 +57,6 @@ def resolve(
         endpoint=ep,
         gateway_host=host,
         project=project or os.environ.get("NETRA_PROJECT"),
+        agent=agent or os.environ.get("NETRA_AGENT"),
         environment=environment or os.environ.get("NETRA_ENVIRONMENT"),
     )

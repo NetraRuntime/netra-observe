@@ -23,6 +23,15 @@ def test_resource_defaults():
     assert "netra.project" not in a and "deployment.environment" not in a
 
 
+def test_agent_resource_attribute():
+    r = build_resource(cfg(project="support", agent="triage-bot"))
+    assert r.attributes["gen_ai.agent.name"] == "triage-bot"
+
+
+def test_no_agent_attribute_when_unset():
+    assert "gen_ai.agent.name" not in build_resource(cfg()).attributes
+
+
 def test_exporter_endpoint_and_auth():
     e = build_exporter(cfg(endpoint="http://localhost:9999/v1/otel"))
     assert e._endpoint == "http://localhost:9999/v1/otel/v1/traces"

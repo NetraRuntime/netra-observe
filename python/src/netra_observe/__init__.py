@@ -81,6 +81,7 @@ def instrument(
     project: Optional[str] = None,
     environment: Optional[str] = None,
     endpoint: Optional[str] = None,
+    agent: Optional[str] = None,
     tracer_provider: Optional[TracerProvider] = None,
 ) -> NetraInstrumentation:
     """Wire LangChain tracing into Netra. Idempotent; never raises after
@@ -89,7 +90,7 @@ def instrument(
     with _lock:
         if _active is not None:
             return _active
-        cfg = resolve(api_key, project, environment, endpoint)
+        cfg = resolve(api_key, project, environment, endpoint, agent=agent)
         processor = None
         if tracer_provider is not None:
             # Attach mode: export to Netra through the USER's provider by

@@ -17,6 +17,13 @@ describe("buildResource", () => {
         expect(r.attributes["netra.project"]).toBeUndefined()
         expect(r.attributes["deployment.environment"]).toBeUndefined()
     })
+    it("sets gen_ai.agent.name when agent is configured", () => {
+        const r = buildResource(cfg({ project: "support", agent: "triage-bot" }))
+        expect(r.attributes["gen_ai.agent.name"]).toBe("triage-bot")
+    })
+    it("omits gen_ai.agent.name when unset", () => {
+        expect(buildResource(cfg()).attributes["gen_ai.agent.name"]).toBeUndefined()
+    })
 })
 
 describe("buildExporter", () => {

@@ -12,6 +12,8 @@ def build_resource(cfg: Config) -> Resource:
     attrs = {"service.name": cfg.project or "netra-observe"}
     if cfg.project:
         attrs["netra.project"] = cfg.project
+    if cfg.agent:
+        attrs["gen_ai.agent.name"] = cfg.agent
     if cfg.environment:
         attrs["deployment.environment"] = cfg.environment
     return Resource.create(attrs)

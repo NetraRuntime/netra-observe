@@ -45,4 +45,9 @@ describe("resolveConfig", () => {
     it("throws without an api key", () => {
         expect(() => resolveConfig()).toThrow(NetraConfigError)
     })
+    it("falls back to NETRA_AGENT", () => {
+        process.env.NETRA_AGENT = "env-bot"
+        expect(resolveConfig({ apiKey: "ntr_x" }).agent).toBe("env-bot")
+        delete process.env.NETRA_AGENT
+    })
 })

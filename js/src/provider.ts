@@ -12,6 +12,7 @@ export function buildResource(cfg: NetraConfig): Resource {
         "service.name": cfg.project ?? "netra-observe",
     }
     if (cfg.project) attrs["netra.project"] = cfg.project
+    if (cfg.agent) attrs["gen_ai.agent.name"] = cfg.agent
     if (cfg.environment) attrs["deployment.environment"] = cfg.environment
     return resourceFromAttributes(attrs)
 }

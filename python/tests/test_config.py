@@ -34,3 +34,9 @@ def test_missing_key_raises(monkeypatch):
     monkeypatch.delenv("NETRA_API_KEY", raising=False)
     with pytest.raises(NetraConfigError):
         resolve()
+
+
+def test_agent_env_fallback(monkeypatch):
+    monkeypatch.setenv("NETRA_API_KEY", "ntr_x")
+    monkeypatch.setenv("NETRA_AGENT", "env-bot")
+    assert resolve().agent == "env-bot"

@@ -7,12 +7,14 @@ export interface NetraConfig {
     endpoint: string
     gatewayHost: string
     project?: string
+    agent?: string
     environment?: string
 }
 
 export interface InstrumentOptions {
     apiKey?: string
     project?: string
+    agent?: string
     environment?: string
     endpoint?: string
 }
@@ -48,6 +50,7 @@ export function resolveConfig(opts: InstrumentOptions = {}): NetraConfig {
         endpoint,
         gatewayHost,
         project: opts.project ?? process.env.NETRA_PROJECT,
+        agent: opts.agent ?? process.env.NETRA_AGENT,
         environment: opts.environment ?? process.env.NETRA_ENVIRONMENT,
     }
 }
