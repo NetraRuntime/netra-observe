@@ -6,6 +6,7 @@ const ENVS = [
     "NETRA_OTEL_ENDPOINT",
     "NETRA_PROJECT",
     "NETRA_ENVIRONMENT",
+    "NETRA_AGENT",
 ]
 afterEach(() => ENVS.forEach((k) => delete process.env[k]))
 
@@ -48,6 +49,5 @@ describe("resolveConfig", () => {
     it("falls back to NETRA_AGENT", () => {
         process.env.NETRA_AGENT = "env-bot"
         expect(resolveConfig({ apiKey: "ntr_x" }).agent).toBe("env-bot")
-        delete process.env.NETRA_AGENT
     })
 })
