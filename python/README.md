@@ -17,6 +17,11 @@ pip install netra-observe
 from netra_observe import instrument
 
 instrument(api_key="sk_live_...", project="support-agent")
+
+# Optionally declare an agent identity (keyword-only; NETRA_AGENT env
+# also works) — it becomes the `gen_ai.agent.name` resource attribute
+# and drives the dashboard's agent grouping and filters:
+instrument(api_key="sk_live_...", project="support", agent="triage-bot")
 ```
 
 Call it once at startup, **before** building your chains. Everything

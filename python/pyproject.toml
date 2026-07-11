@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "netra-observe"
-version = "0.1.1"
+version = "0.2.0"
 description = "One-line LangChain observability for Netra Runtime: traces into your Usage tab."
 readme = "README.md"
 # openinference-instrumentation-langchain>=0.1.67 requires >=3.10 — claiming
