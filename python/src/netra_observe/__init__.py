@@ -81,8 +81,11 @@ def instrument(
     project: Optional[str] = None,
     environment: Optional[str] = None,
     endpoint: Optional[str] = None,
-    agent: Optional[str] = None,
     tracer_provider: Optional[TracerProvider] = None,
+    *,
+    # Keyword-only: tracer_provider predates `agent` as the 5th positional
+    # arg — a positional TracerProvider must never silently bind to `agent`.
+    agent: Optional[str] = None,
 ) -> NetraInstrumentation:
     """Wire LangChain tracing into Netra. Idempotent; never raises after
     config validation succeeds."""

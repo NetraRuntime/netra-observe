@@ -92,3 +92,17 @@ def test_does_not_uninstrument_preexisting_instrumentation():
         )
     finally:
         li.uninstrument()
+
+
+def test_agent_is_keyword_only_and_tracer_provider_keeps_its_slot():
+    # Publish gate (final review 2026-07-11): pre-agent callers pass
+    # tracer_provider as the 5th positional arg — inserting `agent` before
+    # it would silently bind a TracerProvider to `agent`. Pin the contract:
+    # tracer_provider stays 5th, agent is keyword-only.
+    import inspect
+
+    from netra_observe import instrument
+
+    params = inspect.signature(instrument).parameters
+    assert list(params).index("tracer_provider") == 4
+    assert params["agent"].kind is inspect.Parameter.KEYWORD_ONLY
